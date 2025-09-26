@@ -4,13 +4,14 @@ A high-performance Streamlit application for Parkinson's disease classification 
 
 ## Features
 
-- **85/5/10 Data Split**: Optimal train/validation/test split for robust evaluation
+- **Stratified 85/5/10 Data Split**: Preserves class ratios across train/validation/test sets
 - **Self-contained ML Implementation**: Custom algorithms without external dependencies
-  - Logistic Regression with gradient descent
+  - Logistic Regression with gradient descent optimization
   - K-Nearest Neighbors with euclidean distance
   - Naive Bayes with Gaussian distribution
 - **Feature Engineering**: Correlation-based selection and z-score normalization
-- **Performance Optimization**: Achieved 97.14% F1-Score on test set
+- **Hyperparameter Optimization**: Grid search on validation set for optimal performance
+- **Performance Results**: Achieved >97% F1-Score on test set
 
 ## Results Achieved
 
@@ -23,7 +24,7 @@ A high-performance Streamlit application for Parkinson's disease classification 
 
 ## Usage
 
-1. Install Streamlit: `pip install streamlit pandas numpy`
+1. Install dependencies: `pip install streamlit pandas numpy`
 2. Run the application: `streamlit run app.py`
 3. Click "Load Parkinson's Dataset"
 4. Configure feature selection and scaling options
@@ -37,8 +38,9 @@ Each sample represents voice recordings from individuals, with binary classifica
 
 ## Technical Implementation
 
-- **Data Processing**: Custom train/test split with stratification
+- **Data Processing**: Stratified train/validation/test split maintaining class balance
 - **Feature Selection**: Correlation-based ranking with configurable k-best selection
-- **Scaling**: Z-score normalization using training statistics
-- **Model Training**: Grid search hyperparameter optimization
-- **Evaluation**: Comprehensive metrics including confusion matrix analysis
+- **Scaling**: Z-score normalization using training set statistics
+- **Hyperparameter Tuning**: Grid search for KNN k-values and Logistic Regression parameters
+- **Evaluation**: Comprehensive metrics including precision, recall, F1-score, and confusion matrix
+- **Performance Focus**: Optimized for maximum classification accuracy without visualizations
