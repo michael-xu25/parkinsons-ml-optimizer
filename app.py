@@ -4,6 +4,7 @@ import numpy as np
 import time
 import math
 import random
+import os
 from collections import defaultdict
 import warnings
 warnings.filterwarnings('ignore')
@@ -27,8 +28,14 @@ if 'results' not in st.session_state:
 def load_data():
     """Load the Parkinson's dataset"""
     try:
-        # Load the attached dataset
-        data = pd.read_csv('attached_assets/parkinsons_1758889282656.data 2')
+        # Try GitHub repository path first
+        if os.path.exists('parkinsons_dataset.csv'):
+            data = pd.read_csv('parkinsons_dataset.csv')
+        # Fallback to attached assets
+        elif os.path.exists('attached_assets/parkinsons_1758889282656.data 2'):
+            data = pd.read_csv('attached_assets/parkinsons_1758889282656.data 2')
+        else:
+            raise FileNotFoundError("Dataset file not found in expected locations")
         return data
     except Exception as e:
         st.error(f"Error loading dataset: {str(e)}")
@@ -41,29 +48,48 @@ def prepare_data(data):
     y = data['status']
     return X, y
 
-def train_test_split_custom(X, y, test_size=0.1, random_state=42):
-    """Custom train-test split implementation"""
+def stratified_train_test_split(X, y, test_size=0.1, random_state=42):
+    """Stratified train-test split implementation"""
     np.random.seed(random_state)
-    n_samples = len(X)
-    indices = np.arange(n_samples)
-    np.random.shuffle(indices)
     
-    n_test = int(n_samples * test_size)
-    test_indices = indices[:n_test]
-    train_indices = indices[n_test:]
+    # Get indices for each class
+    class_0_indices = np.where(y == 0)[0]
+    class_1_indices = np.where(y == 1)[0]
+    
+    # Shuffle indices within each class
+    np.random.shuffle(class_0_indices)
+    np.random.shuffle(class_1_indices)
+    
+    # Calculate split sizes for each class
+    n_test_0 = int(len(class_0_indices) * test_size)
+    n_test_1 = int(len(class_1_indices) * test_size)
+    
+    # Split each class
+    test_indices_0 = class_0_indices[:n_test_0]
+    train_indices_0 = class_0_indices[n_test_0:]
+    
+    test_indices_1 = class_1_indices[:n_test_1]
+    train_indices_1 = class_1_indices[n_test_1:]
+    
+    # Combine and shuffle the final indices
+    train_indices = np.concatenate([train_indices_0, train_indices_1])
+    test_indices = np.concatenate([test_indices_0, test_indices_1])
+    
+    np.random.shuffle(train_indices)
+    np.random.shuffle(test_indices)
     
     return (X.iloc[train_indices], X.iloc[test_indices], 
             y.iloc[train_indices], y.iloc[test_indices])
 
 def split_data(X, y):
-    """Split data into 85% train, 5% validation, 10% test"""
-    # First split: separate test set (10%)
-    X_temp, X_test, y_temp, y_test = train_test_split_custom(X, y, test_size=0.10, random_state=42)
+    """Split data into 85% train, 5% validation, 10% test with stratification"""
+    # First split: separate test set (10%) with stratification
+    X_temp, X_test, y_temp, y_test = stratified_train_test_split(X, y, test_size=0.10, random_state=42)
     
     # Second split: separate train (85%) and validation (5%) from remaining 90%
     # 5/90 = 0.0556 to get 5% of total data
     val_size_relative = 0.05 / 0.90
-    X_train, X_val, y_train, y_val = train_test_split_custom(X_temp, y_temp, test_size=val_size_relative, random_state=42)
+    X_train, X_val, y_train, y_val = stratified_train_test_split(X_temp, y_temp, test_size=val_size_relative, random_state=42)
     
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -333,12 +359,41 @@ if st.session_state.data_loaded:
                 X_train, X_val, X_test = standardize_features(X_train, X_val, X_test)
                 st.success("✅ Features standardized")
         
-        # Train models
+        # Train models with hyperparameter optimization
+        st.info("🔧 Performing hyperparameter optimization...")
+        
+        # Optimize KNN
+        best_knn_score = 0
+        best_k = 5
+        for k in [3, 5, 7, 9, 11]:
+            knn_model = SimpleKNN(k=k)
+            knn_model.fit(X_train, y_train)
+            val_pred = knn_model.predict(X_val)
+            val_metrics = calculate_metrics(y_val, val_pred)
+            if val_metrics['f1_score'] > best_knn_score:
+                best_knn_score = val_metrics['f1_score']
+                best_k = k
+        
+        # Optimize Logistic Regression
+        best_lr_score = 0
+        best_lr_params = {'learning_rate': 0.01, 'max_iter': 1000}
+        for lr in [0.001, 0.01, 0.1]:
+            for max_iter in [500, 1000, 1500]:
+                lr_model = SimpleLogisticRegression(learning_rate=lr, max_iter=max_iter)
+                lr_model.fit(X_train, y_train)
+                val_pred = lr_model.predict(X_val)
+                val_metrics = calculate_metrics(y_val, val_pred)
+                if val_metrics['f1_score'] > best_lr_score:
+                    best_lr_score = val_metrics['f1_score']
+                    best_lr_params = {'learning_rate': lr, 'max_iter': max_iter}
+        
         models = {
-            "Logistic Regression": SimpleLogisticRegression(learning_rate=0.01, max_iter=1000),
-            "K-Nearest Neighbors": SimpleKNN(k=5),
+            "Logistic Regression": SimpleLogisticRegression(**best_lr_params),
+            "K-Nearest Neighbors": SimpleKNN(k=best_k),
             "Naive Bayes": SimpleNaiveBayes()
         }
+        
+        st.success(f"✅ Optimized hyperparameters: KNN k={best_k}, LR lr={best_lr_params['learning_rate']}")
         
         results = {}
         progress_bar = st.progress(0)
